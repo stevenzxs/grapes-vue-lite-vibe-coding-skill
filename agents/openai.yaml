@@ -1,0 +1,4 @@
+interface:
+  display_name: "Grapes Vue Lite Bridge"
+  short_description: "Grapes Vue Lite bridge commands."
+  default_prompt: "Use $grapes-vue-lite-vibe-coding-skill to control the open Grapes Vue Lite page through the confirmed local bridge command flow."
