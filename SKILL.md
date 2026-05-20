@@ -47,12 +47,89 @@ The `grapes-vue-lite-vibe-coding-mcp` server exposes these tools for bridge inte
 ### Apply / Preview
 - **`editor_apply_a2ui`** — Apply an A2UI JSONL stream to the editor. Args: `input`, `session_id`.
 
+## Component & Block Reference
+
+When building or editing a page, first call **`editor_list_blocks`** and **`editor_list_components`** to discover the full set of available primitives. The editor distinguishes between **blocks** (higher-level layout/content presets) and **components** (low-level HTML elements).
+
+### Discovery Commands
+
+- **`editor_list_blocks`** — Returns 31 blocks in 5 categories:
+  - `Layout` — page structure primitives
+  - `Basic` — interactive or grouped elements
+  - `Content` — text, headings, cards, quotes
+  - `Media` — images, video, SVG, icons
+  - `Demo` — example/declarative blocks
+
+- **`editor_list_components`** — Returns 30 atomic components (headings, buttons, inputs, tables, etc.)
+
+### When to Use What — Decision Guide
+
+| Intent | Recommended Block/Component | Notes |
+|--------|---------------------------|-------|
+| **Root page wrapper** | `root` (component) | Every page already has this; do not add a second root. |
+| **Full-width horizontal band** | `section` (block) | Use for hero banners, feature bands, footers. Accepts children. |
+| **Centered max-width wrapper** | `container` (block) | Use inside `section` to constrain content width. |
+| **Two-column layout** | `columns` (block) | Preferred over manual `columns` + `column` component tree. |
+| **Three-column layout** | `three-columns` (block) | Pre-configured 3-col grid. |
+| **Four-column layout** | `four-columns` (block) | Pre-configured 4-col grid. |
+| **Five-column layout** | `five-columns` (block) | Pre-configured 5-col grid. |
+| **Sidebar + content layout** | `pad-layout` (block) | Fixed left icon menu with right paged viewport. |
+| **Navigation bar** | `navbar` (block) | Brand + links. Use at top of page. |
+| **Image + title + text + CTA** | `card` (block) | Structured content card. |
+| **Carousel / slider** | `carousel` (block) | With autoplay, dots, arrows traits. |
+| **FAQ / collapsible list** | `accordion` (block) | Grouped disclosure items. |
+| **Tabbed content** | `tabs` (block) | Tab triggers + panels. |
+| **Progress steps** | `stepper` (block) | Step indicators + panels. |
+| **Form fields** | `field-group` (block) | Label + input/select/textarea with semantic commands. |
+| **Data table** | `structured-table` (block) | Semantic table with row/col editing. |
+| **Repeating list** | `structured-list` (block) | Repeater with insert, duplicate, reorder, remove. |
+| **Heading** | `heading` (block/component) | `h2` by default. Use for section titles. |
+| **Paragraph** | `text` (block/component) | Editable paragraph. |
+| **Button / CTA** | `button` (block/component) | Link (`<a>`) with href, target traits. |
+| **Image** | `image` (block/component) | Responsive image with src, alt, loading traits. |
+| **Video** | `video` (component) | HTML5 video player. |
+| **SVG icon** | `svg` (component) | Inline SVG via `data-gv-svg` trait. |
+| **Divider line** | `divider` (block/component) | Horizontal rule. |
+| **Vertical spacing** | `spacer` (block/component) | Empty height/margin block. |
+| **Form input** | `input` (component) | Text, email, password, checkbox, radio. |
+| **Form select** | `select` (component) | Dropdown with options. |
+| **Form textarea** | `textarea` (component) | Multi-line text. |
+| **Toggle switch** | `switch` (block/component) | Boolean toggle. |
+| **Range slider** | `slider` (block/component) | Numeric range input. |
+| **Table (manual)** | `table` + `thead`/`tbody`/`tr`/`th`/`td` (components) | Use `structured-table` block instead unless custom markup is required. |
+
+### Layout Strategy
+
+1. **Start with a `section`** for each horizontal band.
+2. **Inside the section**, add a `container` to center content.
+3. **For multi-column layouts**, prefer the pre-built block:
+   - 2 columns → `columns`
+   - 3 columns → `three-columns`
+   - 4 columns → `four-columns`
+   - 5 columns → `five-columns`
+   - Sidebar layout → `pad-layout`
+4. **Add content blocks** (`heading`, `text`, `card`, `image`, `button`) inside columns or containers.
+5. **Use `spacer`** or `divider` to create visual separation between sections.
+
+### Component Traits (Properties)
+
+Many components expose **traits** (editable properties). Common ones:
+
+- `href` / `target` — on `button`
+- `src` / `alt` / `loading` — on `image`
+- `data-gv-carousel-autoplay` / `data-gv-carousel-interval` — on `carousel`
+- `type` / `placeholder` / `required` — on `input`, `textarea`
+- `data-gv-svg` — on `svg`
+
+Use `editor_list_components` with `include_traits=true` to see the full trait schema for each component.
+
 ## Required Workflow
 
 1. Call **`editor_list_sessions`** to get active sessions.
 2. Pick a session where `capabilities.snapshot === true` (for reads) and/or `capabilities.apply === true` (for mutations).
-3. Pass the chosen `session_id` to the appropriate MCP tool above.
-4. Read the tool result directly. Do not query separate result endpoints.
+3. **Before building, call `editor_list_blocks` and `editor_list_components`** to discover the current editor's available primitives.
+4. Pass the chosen `session_id` to the appropriate MCP tool above.
+5. Read the tool result directly. Do not query separate result endpoints.
 
 All tools handle bridge token authentication internally via the MCP server configuration.
 
