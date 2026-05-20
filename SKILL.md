@@ -67,6 +67,30 @@ Command body:
 4. Generate a fresh unique command `id` for every request.
 5. Read the command result from the POST response. Do not query a separate result endpoint.
 
+## Capability Boundary
+
+Only use operations that are explicitly exposed by the currently available MCP tools, this skill, or the bridge session capabilities returned by `/sessions`.
+
+If the user asks for an editor operation that is not explicitly supported, reply that the current bridge/MCP tooling does not support that operation yet. Do not search local source code to discover hidden command names, internal editor APIs, or undocumented behavior.
+
+Examples of unsupported-operation handling:
+
+- If there is no explicit page creation tool or documented bridge command, do not guess `editor.addPage`; say page creation is not currently supported by the bridge/MCP tools.
+- If there is no explicit page path update tool or documented bridge command, do not infer one from editor source; say path update is not currently supported.
+- If the required operation could be done only by editing source code, browser console injection, or undocumented command types, stop and report the missing capability unless the user explicitly asks to implement that capability.
+
+Allowed discovery:
+
+- Calling `editor_list_sessions` or `GET /sessions` to inspect sanitized runtime session capabilities.
+- Calling documented MCP tools such as `editor_get_snapshot` and `editor_apply_a2ui`.
+- Reading this skill and user-provided docs.
+
+Disallowed discovery:
+
+- Searching `craft.js-vue` or other local source trees to find command names.
+- Probing unknown bridge endpoints or guessed command types.
+- Using browser-console/editor internals to bypass the bridge contract.
+
 ## Do Not Probe
 
 Do not call these unless the user is explicitly debugging bridge routes:
