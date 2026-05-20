@@ -1,6 +1,6 @@
 ---
 name: grapes-vue-lite-vibe-coding-skill
-description: Use when Codex needs to control an already-open Grapes Vue Lite / craft.js-vue editor through the local bridge, especially requests mentioning localhost/127.0.0.1:3003, bridge port 3456, opencodeBridge, localBridgeToken, current Grapes Vue Lite page, editor snapshot, a2ui.ingestApply, applying A2UI/JSONL/design output to the open page, or avoiding /token and route probing. Always use the confirmed /sessions then /sessions/{sessionId}/commands?token=...&wait=1 workflow with unique command IDs.
+description: Use when controlling an already-open Grapes Vue Lite / craft.js-vue editor through the local bridge. Prefer the MCP tools exposed by grapes-vue-lite-vibe-coding-mcp (editor_list_sessions, editor_get_snapshot, editor_apply_a2ui, editor_create_page, etc.) over raw HTTP calls. Triggered by mentions of localhost/127.0.0.1:3003, bridge port 3456, opencodeBridge, localBridgeToken, or A2UI apply operations.
 ---
 
 # Grapes Vue Lite Local Bridge
@@ -19,53 +19,42 @@ Use this skill for requests that mention any of:
 
 Do not use this skill for generic web browsing, unrelated localhost apps, or editing source code unless the task also needs this bridge command flow.
 
-## Confirmed Endpoints
+## Available MCP Tools
 
-Use only these bridge calls unless the user explicitly asks to investigate bridge internals.
+The `grapes-vue-lite-vibe-coding-mcp` server exposes these tools for bridge interaction:
 
-Bridge base:
+### Session Discovery
+- **`editor_list_sessions`** — List active Grapes Vue Lite bridge sessions with capabilities.
 
-```text
-http://127.0.0.1:3456
-```
+### Snapshot
+- **`editor_get_snapshot`** — Get the current editor state (pages, components, tree).
 
-Page URL pattern:
+### Page Operations
+- **`editor_create_page`** — Create a new page. Args: `name`, `path`, `session_id` (optional).
+- **`editor_duplicate_page`** — Duplicate an existing page. Args: `page_id`, `session_id` (optional).
 
-```text
-http://127.0.0.1:3003/?opencodeBridge=1&localBridgeToken=<token>
-```
+### Asset Operations
+- **`editor_browse_asset_library`** — Browse configured image libraries. Args: `source_id`, `page`, `page_size`, `session_id`.
+- **`editor_select_local_image`** — Add/select a local image. Args: `src` (or `local_path`), `name`, `alt`, `apply_to_selected`, `session_id`.
+- **`editor_delete_asset`** — Delete a project image asset. Args: `asset_id`, `session_id`.
 
-Get sessions:
+### Block / Component Operations
+- **`editor_list_blocks`** — List available editor blocks. Args: `category`, `search`, `include_content`, `session_id`.
+- **`editor_list_components`** — List available component types. Args: `search`, `include_traits`, `session_id`.
+- **`editor_browse_component_library`** — Browse component-library sources. Args: `source_id`, `page`, `page_size`, `search`, `category`, `include_block`, `session_id`.
+- **`editor_update_node_style`** — Update a canvas node's style. Args: `node_id`, `style`, `mode`, `session_id`.
 
-```http
-GET /sessions
-Authorization: Bearer <token>
-```
-
-Send a command and wait for its result:
-
-```http
-POST /sessions/{sessionId}/commands?token=<token>&wait=1
-Content-Type: application/json
-```
-
-Command body:
-
-```json
-{
-  "id": "cmd-<timestamp>-<random>",
-  "type": "editor.getSnapshot",
-  "payload": {}
-}
-```
+### Apply / Preview
+- **`editor_apply_a2ui`** — Apply an A2UI JSONL stream to the editor. Args: `input`, `session_id`.
 
 ## Required Workflow
 
-1. Get sessions with `GET /sessions`.
-2. Pick a session where `capabilities.snapshot === true` and, for mutations, `capabilities.apply === true`.
-3. Send all commands through `POST /sessions/{sessionId}/commands?token=<token>&wait=1`.
-4. Generate a fresh unique command `id` for every request.
-5. Read the command result from the POST response. Do not query a separate result endpoint.
+1. Call **`editor_list_sessions`** to get active sessions.
+2. Pick a session where `capabilities.snapshot === true` (for reads) and/or `capabilities.apply === true` (for mutations).
+3. Pass the chosen `session_id` to the appropriate MCP tool above.
+4. Read the tool result directly. Do not query separate result endpoints.
+
+All tools handle bridge token authentication internally via the MCP server configuration.
 
 ## Capability Boundary
 
@@ -111,34 +100,11 @@ Known behavior:
 
 These errors do not imply that the frontend page or bridge stopped.
 
-## PowerShell Templates
-
-Get sessions:
-
-```powershell
-$token = '<token>'
-$headers = @{ Authorization = "Bearer $token" }
-Invoke-RestMethod -Uri 'http://127.0.0.1:3456/sessions' -Method Get -Headers $headers
-```
-
-Send a command and wait:
-
-```powershell
-$token = '<token>'
-$sessionId = '<session-id>'
-$commandId = "cmd-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())-$([Guid]::NewGuid().ToString('N').Substring(0,8))"
-$headers = @{ 'Content-Type' = 'application/json' }
-$body = @{
-  id = $commandId
-  type = 'editor.getSnapshot'
-  payload = @{}
-} | ConvertTo-Json -Depth 20
-Invoke-RestMethod -Uri "http://127.0.0.1:3456/sessions/$sessionId/commands?token=$token&wait=1" -Method Post -Headers $headers -Body $body
-```
-
 ## Applying A2UI
 
-When applying or previewing A2UI, keep the same command endpoint and only change `type` and `payload`. Do not change URL paths.
+Use the **`editor_apply_a2ui`** MCP tool. The tool takes:
+- `input` — the A2UI JSONL string
+- `session_id` (optional)
 
 When applying a fixed-size Pencil/Figma prototype, preserve the source top-level frame dimensions:
 
@@ -152,70 +118,24 @@ When applying a fixed-size Pencil/Figma prototype, preserve the source top-level
 - Keep `root` free of visual padding/background/border radius unless the user explicitly wants page chrome outside the prototype.
 - If dimensions still do not match after apply, first inspect the generated A2UI stream before changing `craft.js-vue` source.
 
-For `a2ui.ingestApply`, the payload shape is strict:
+For `editor_apply_a2ui`, the `input` must be the raw A2UI JSONL string:
+
+```
+{"surfaceUpdate":{...}}
+{"beginRendering":{...}}
+```
+
+Do **not** wrap it in an object like:
 
 ```json
 {
-  "id": "cmd-<unique>",
-  "type": "a2ui.ingestApply",
-  "payload": {
-    "input": "{\"surfaceUpdate\":{...}}\n{\"beginRendering\":{...}}"
-  }
+  "surfaceId": "pencil-lamp",
+  "jsonl": "...",
+  "pageName": "lamp-from-pencil",
+  "mode": "replacePage"
 }
 ```
 
-`payload.input` must be the A2UI JSONL string itself.
-
-Do not send:
-
-```json
-{
-  "payload": {
-    "surfaceId": "pencil-lamp",
-    "jsonl": "...",
-    "pageName": "lamp-from-pencil",
-    "mode": "replacePage"
-  }
-}
-```
-
-This returns `Missing payload.input`.
-
-Also do not send:
-
-```json
-{
-  "payload": {
-    "input": {
-      "surfaceId": "pencil-lamp",
-      "jsonl": "...",
-      "pageName": "lamp-from-pencil",
-      "mode": "replacePage"
-    }
-  }
-}
-```
-
-This returns `Unknown message type: surfaceId, jsonl, mode, pageName` because the bridge treats `input` as the A2UI stream, not as an options object.
+This returns `Missing payload.input` because the bridge expects `input` to be the JSONL stream directly.
 
 Use bridge-compatible A2UI JSONL when the target bridge has shown timeout sensitivity to an empty `dataModelUpdate` after `beginRendering`.
-
-PowerShell template:
-
-```powershell
-$token = '<token>'
-$sessionId = '<session-id>'
-$commandId = "cmd-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())-$([Guid]::NewGuid().ToString('N').Substring(0,8))"
-$line1 = '<surfaceUpdate JSON>'
-$line2 = '<beginRendering JSON>'
-$jsonl = "$line1`n$line2"
-$headers = @{ 'Content-Type' = 'application/json' }
-$body = @{
-  id = $commandId
-  type = 'a2ui.ingestApply'
-  payload = @{
-    input = $jsonl
-  }
-} | ConvertTo-Json -Depth 80
-Invoke-RestMethod -Uri "http://127.0.0.1:3456/sessions/$sessionId/commands?token=$token&wait=1" -Method Post -Headers $headers -Body $body
-```
